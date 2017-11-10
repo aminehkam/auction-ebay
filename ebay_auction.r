@@ -1,7 +1,6 @@
 library(ggplot2)
 library(randomForest)
 library(dplyr)
-install.packages('caret', dependencies = TRUE)
 library(caret)
 library(doSNOW)
 library(e1071)
@@ -19,8 +18,8 @@ table(auction$item)
 table(auction$auction_type)
 
 
-# creating derived features
-## number of bids & average bid per auction
+# creating derived features: 
+## winning bid, number of bids & average bid per auction
 u<-unique(auction$auctionid)
 winner<-rep(0,nrow(auction))
 
@@ -72,13 +71,15 @@ ggplot(auction,aes(x =item, fill= winner))+
         xlab("Auction Item")+ ylab("Total Count")
 
 # check if no. of bids has predictive power
+# hypothesis - As number of bids per item increases chance of winning drops
+
 ggplot(auction,aes(x = num.bids, fill= winner))+
         geom_histogram(binwidth = 20)+
         facet_wrap(~auction_type)+
         xlab("Number of Bids per Auction")+ ylab("Total Count")
 
 # check if distance from open bid has predictive power
-# hypothesis - Final sale price is higher for items with higher number of bids per item
+# hypothesis - Bids much higher than openning bid have higher chance of winning
 ggplot(auction)+
         geom_point(aes(x = dist.open,y=price, color= winner))+
         facet_wrap(~auction_type)+
@@ -86,6 +87,8 @@ ggplot(auction)+
 
 
 # check if distance from average bid has predictive power
+# hypothesis - Bids below the average bid have zero chance of winning
+
 ggplot(auction)+
         geom_point(aes(x =dist.ave,y=price, color= winner))+
         facet_wrap(~auction_type)+
@@ -93,14 +96,17 @@ ggplot(auction)+
 
 
 # check if time fraction has predictive power
+# hypothesis - Bids placed toward the end of the auction have higher chance of winning
+
 ggplot(auction)+
         geom_point(aes(x =time.fraction,y=price, color= winner))+
         facet_wrap(~auction_type)+
         xlab("Bidding Time")+ ylab("Final Sale Price")
 
 
-######## 
-# Train a random forests with open bid and no. of bids
+######## Machine learning algortihm to predict winning bids
+
+# Train a random forests with dist. from open bid,dist. form average bid and no. of bids
 rf.train1<-auction[,c("dist.open","dist.ave","num.bids")]
 
 set.seed(123)
@@ -108,7 +114,8 @@ rf1<-randomForest(x=rf.train1,y=auction$winner, importance = TRUE,ntree = 1000)
 rf1
 varImpPlot(rf1)
 
-#Train a random forest with open bid, no. of bids, aution type
+# Train a random forests with dist. from open bid, 
+# dist. form average bid, bidding time, and no. of bids
 rf.train2<-auction[,c("dist.open","dist.ave","num.bids","time.fraction")]
 
 set.seed(123)
@@ -116,7 +123,8 @@ rf2<-randomForest(x=rf.train2,y=auction$winner, importance = TRUE,ntree = 1000)
 rf2
 varImpPlot(rf2)
 
-#Train a random forest with open bid, no. of bids, aution type
+# Train a random forests with dist. from open bid, 
+# dist. form average bid, bidding time,auction type and no. of bids
 rf.train3<-auction[,c("dist.open","dist.ave","num.bids","time.fraction","auction_type")]
 
 set.seed(123)
@@ -124,20 +132,22 @@ rf3<-randomForest(x=rf.train3,y=auction$winner, importance = TRUE,ntree = 1000)
 rf3
 varImpPlot(rf3)
 
-#Train a random forest with open bid, no. of bids, aution type
+# Train a random forests with dist. from open bid, 
+# dist. form average bid, bidding time, item, and no. of bids
 rf.train4<-auction[,c("dist.open","dist.ave","num.bids","time.fraction","item")]
 
 set.seed(123)
 rf4<-randomForest(x=rf.train4,y=auction$winner, importance = TRUE,ntree = 1000)
 rf4
 varImpPlot(rf4)
+
+
 # overfitting? optimistic error rate?
 ## is it too dependent on that data? likely to have a higher error rate on new unseen data?
 
 
 #### Cross Validation
-#validate technique for assessing how the results of the statistical analysis 
-#will generalize to independent data set.  
+
 #to estimate how accurately the predictive model will perform in practice. 
 rf.label<-as.factor(auction$winner)
 
@@ -159,10 +169,11 @@ ctrl.1 <- trainControl(method = "repeatedcv", number = 10, repeats = 10,
 cl <- makeCluster(6, type = "SOCK")
 registerDoSNOW(cl)
 
-# Set seed for reproducibility and train
+
 set.seed(123)
 rf2.cv1 <- train(x = rf.train2, y = rf.label, method = "rf", tuneLength = 3,
                    ntree = 500, trControl = ctrl.1)
 stopCluster(cl)
+
 #check out the results
 rf2.cv1
